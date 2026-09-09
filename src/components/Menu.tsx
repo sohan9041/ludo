@@ -2,8 +2,11 @@ import { useState } from 'react'
 import { COLORS, type Color } from '../game/types'
 import { COLOR_HEX } from './colors'
 
+export type SeatKind = 'off' | 'human' | 'bot'
+
 export interface LocalSetup {
   players: Partial<Record<Color, string>>
+  bots: Color[]
 }
 
 interface Props {
@@ -12,23 +15,39 @@ interface Props {
   onJoinRoom: (code: string, name: string) => void
   error?: string | null
   initialCode?: string
+  resume?: () => void
 }
 
 const DEFAULT: Record<Color, string> = { red: 'Red', green: 'Green', yellow: 'Yellow', blue: 'Blue' }
 
-export function Menu({ onLocal, onCreateRoom, onJoinRoom, error, initialCode = '' }: Props) {
+export function Menu({ onLocal, onCreateRoom, onJoinRoom, error, initialCode = '', resume }: Props) {
   const [tab, setTab] = useState<'local' | 'online'>(initialCode ? 'online' : 'local')
-  const [enabled, setEnabled] = useState<Record<Color, boolean>>({ red: true, green: false, yellow: true, blue: false })
+  const [kinds, setKinds] = useState<Record<Color, SeatKind>>(() => {
+    const saved = localStorage.getItem('ludo-local-kinds')
+    return saved ? JSON.parse(saved) : { red: 'human', green: 'human', yellow: 'human', blue: 'human' }
+  })
   const [names, setNames] = useState<Record<Color, string>>(DEFAULT)
   const [nick, setNick] = useState(() => localStorage.getItem('ludo-nick') ?? '')
   const [code, setCode] = useState(initialCode)
 
-  const count = COLORS.filter((c) => enabled[c]).length
+  const count = COLORS.filter((c) => kinds[c] !== 'off').length
+  const humans = COLORS.filter((c) => kinds[c] === 'human').length
+
+  const setKind = (c: Color, k: SeatKind) => {
+    const next = { ...kinds, [c]: k }
+    setKinds(next)
+    localStorage.setItem('ludo-local-kinds', JSON.stringify(next))
+  }
 
   const startLocal = () => {
     const players: Partial<Record<Color, string>> = {}
-    for (const c of COLORS) if (enabled[c]) players[c] = names[c].trim() || DEFAULT[c]
-    onLocal({ players })
+    const bots: Color[] = []
+    for (const c of COLORS) {
+      if (kinds[c] === 'off') continue
+      players[c] = names[c].trim() || DEFAULT[c]
+      if (kinds[c] === 'bot') bots.push(c)
+    }
+    onLocal({ players, bots })
   }
 
   const saveNick = () => localStorage.setItem('ludo-nick', nick)
@@ -53,21 +72,32 @@ export function Menu({ onLocal, onCreateRoom, onJoinRoom, error, initialCode = '
 
       {tab === 'local' && (
         <div className="card">
-          <p className="hint">Pass-and-play on one device. Pick 2–4 players.</p>
+          {resume && (
+            <button className="btn" onClick={resume}>
+              Resume saved game
+            </button>
+          )}
+          <p className="hint">Play offline on one device — 2–4 players, each seat a person or the computer.</p>
           {COLORS.map((c) => (
-            <label key={c} className="player-row">
-              <input type="checkbox" checked={enabled[c]} onChange={(e) => setEnabled({ ...enabled, [c]: e.target.checked })} />
+            <div key={c} className="player-row">
               <span className="swatch" style={{ background: COLOR_HEX[c] }} />
               <input
                 className="input"
                 value={names[c]}
-                disabled={!enabled[c]}
+                disabled={kinds[c] === 'off'}
                 maxLength={12}
+                aria-label={`${c} player name`}
                 onChange={(e) => setNames({ ...names, [c]: e.target.value })}
               />
-            </label>
+              <select className="input kind" value={kinds[c]} aria-label={`${c} seat`} onChange={(e) => setKind(c, e.target.value as SeatKind)}>
+                <option value="human">Player</option>
+                <option value="bot">Computer</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
           ))}
-          <button className="btn btn-primary" disabled={count < 2} onClick={startLocal}>
+          {count >= 2 && humans === 0 && <p className="hint">At least one seat must be a player.</p>}
+          <button className="btn btn-primary" disabled={count < 2 || humans === 0} onClick={startLocal}>
             Start game
           </button>
         </div>

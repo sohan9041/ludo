@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { chooseMove } from '../game/bot'
 import { movableTokens } from '../game/engine'
 import { COLORS, type Color, type GameAction, type GameState } from '../game/types'
 import { useSound } from '../hooks/useSound'
@@ -11,18 +12,45 @@ interface Props {
   dispatch: (a: GameAction) => void
   /** colour controlled from this device; undefined = hot-seat, everyone */
   viewer?: Color | null
+  /** seats played by the computer (local mode) */
+  bots?: Color[]
   onExit: () => void
   onRestart: () => void
   statusExtra?: React.ReactNode
 }
 
-export function GameScreen({ state, dispatch, viewer, onExit, onRestart, statusExtra }: Props) {
+export function GameScreen({ state, dispatch, viewer, bots = [], onExit, onRestart, statusExtra }: Props) {
   const { play, muted, toggleMuted } = useSound()
   const [rolling, setRolling] = useState(false)
   const prev = useRef<GameState>(state)
 
-  const myTurn = viewer === undefined || viewer === state.current
+  const isBot = bots.includes(state.current)
+  const myTurn = !isBot && (viewer === undefined || viewer === state.current)
   const movable = myTurn ? movableTokens(state) : []
+
+  useEffect(() => {
+    if (!isBot || state.phase === 'over') return
+    let cancelled = false
+    const id = setTimeout(() => {
+      if (cancelled) return
+      if (state.phase === 'roll') {
+        play('roll')
+        setRolling(true)
+        setTimeout(() => {
+          if (cancelled) return
+          setRolling(false)
+          dispatch({ type: 'ROLL' })
+        }, 450)
+      } else if (state.phase === 'move' && state.dice !== null) {
+        const token = chooseMove(state, state.dice)
+        if (token !== null) dispatch({ type: 'MOVE', token })
+      }
+    }, 600)
+    return () => {
+      cancelled = true
+      clearTimeout(id)
+    }
+  }, [isBot, state, dispatch, play])
 
   useEffect(() => {
     const p = prev.current
@@ -52,6 +80,7 @@ export function GameScreen({ state, dispatch, viewer, onExit, onRestart, statusE
   const cur = state.players[state.current]
   let status: string
   if (state.phase === 'over') status = `${state.players[state.winners[0]].name} wins!`
+  else if (isBot) status = `${cur.name} (computer) is thinking…`
   else if (state.phase === 'roll') status = myTurn ? `${cur.name}: roll the dice` : `Waiting for ${cur.name} to roll`
   else status = myTurn ? `${cur.name}: choose a token` : `Waiting for ${cur.name} to move`
 

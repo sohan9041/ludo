@@ -1,9 +1,26 @@
-import { useReducer, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import { GameScreen } from './components/GameScreen'
 import { ConnBadge, Lobby } from './components/Lobby'
 import { Menu, type LocalSetup } from './components/Menu'
 import { createGame, reduce } from './game/engine'
 import { useRoom } from './net/useRoom'
+import type { GameState } from './game/types'
+
+const LOCAL_SAVE = 'ludo-local-game'
+
+interface LocalSave {
+  setup: LocalSetup
+  state: GameState
+}
+
+function loadLocal(): LocalSave | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_SAVE)
+    return raw ? (JSON.parse(raw) as LocalSave) : null
+  } catch {
+    return null
+  }
+}
 
 type Mode = { kind: 'menu' } | { kind: 'local'; setup: LocalSetup } | { kind: 'online' }
 
@@ -16,8 +33,19 @@ export default function App() {
   // ?room=CODE deep link → prefill join
   const [prefillCode] = useState(() => new URLSearchParams(location.search).get('room')?.toUpperCase() ?? '')
 
+  const [saved, setSaved] = useState<LocalSave | null>(loadLocal)
+
   if (mode.kind === 'local') {
-    return <LocalGame setup={mode.setup} onExit={() => setMode({ kind: 'menu' })} />
+    return (
+      <LocalGame
+        setup={mode.setup}
+        initial={saved?.state}
+        onExit={() => {
+          setSaved(loadLocal())
+          setMode({ kind: 'menu' })
+        }}
+      />
+    )
   }
 
   if (mode.kind === 'online' && net.room && net.me) {
@@ -63,7 +91,12 @@ export default function App() {
   return (
     <>
       <Menu
-        onLocal={(setup) => setMode({ kind: 'local', setup })}
+        onLocal={(setup) => {
+          localStorage.removeItem(LOCAL_SAVE)
+          setSaved(null)
+          setMode({ kind: 'local', setup })
+        }}
+        resume={saved && saved.state.phase !== 'over' ? () => setMode({ kind: 'local', setup: saved.setup }) : undefined}
         onCreateRoom={(name) => {
           net.createRoom(name)
           setMode({ kind: 'online' })
@@ -80,12 +113,16 @@ export default function App() {
   )
 }
 
-function LocalGame({ setup, onExit }: { setup: LocalSetup; onExit: () => void }) {
-  const [state, dispatch] = useReducer(reduce, setup, (s) => createGame(s.players))
+function LocalGame({ setup, initial, onExit }: { setup: LocalSetup; initial?: GameState; onExit: () => void }) {
+  const [state, dispatch] = useReducer(reduce, setup, (s) => initial ?? createGame(s.players))
+  useEffect(() => {
+    localStorage.setItem(LOCAL_SAVE, JSON.stringify({ setup, state } satisfies LocalSave))
+  }, [setup, state])
   return (
     <GameScreen
       state={state}
       dispatch={dispatch}
+      bots={setup.bots}
       onExit={onExit}
       onRestart={() => dispatch({ type: 'NEW_GAME', players: setup.players })}
     />

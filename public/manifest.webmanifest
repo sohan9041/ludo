@@ -1,0 +1,9 @@
+{
+  "name": "Ludo",
+  "short_name": "Ludo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1f2430",
+  "theme_color": "#1f2430",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
