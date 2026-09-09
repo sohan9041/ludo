@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
+    "strict": true,
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["server", "src/game", "src/net/protocol.ts"]
+}
