@@ -19,6 +19,7 @@ interface Props {
 }
 
 const DEFAULT: Record<Color, string> = { red: 'Red', green: 'Green', yellow: 'Yellow', blue: 'Blue' }
+const OPPOSITE: Record<Color, Color> = { red: 'yellow', yellow: 'red', green: 'blue', blue: 'green' }
 
 export function Menu({ onLocal, onCreateRoom, onJoinRoom, error, initialCode = '', resume }: Props) {
   const [tab, setTab] = useState<'local' | 'online'>(initialCode ? 'online' : 'local')
@@ -35,6 +36,16 @@ export function Menu({ onLocal, onCreateRoom, onJoinRoom, error, initialCode = '
 
   const setKind = (c: Color, k: SeatKind) => {
     const next = { ...kinds, [c]: k }
+    // two players always sit on opposite corners
+    const active = COLORS.filter((x) => next[x] !== 'off')
+    if (active.length === 2) {
+      const keep = k !== 'off' ? c : active[0]
+      const other = active.find((x) => x !== keep)!
+      if (other !== OPPOSITE[keep]) {
+        next[OPPOSITE[keep]] = next[other]
+        next[other] = 'off'
+      }
+    }
     setKinds(next)
     localStorage.setItem('ludo-local-kinds', JSON.stringify(next))
   }
@@ -78,6 +89,7 @@ export function Menu({ onLocal, onCreateRoom, onJoinRoom, error, initialCode = '
             </button>
           )}
           <p className="hint">Play offline on one device — 2–4 players, each seat a person or the computer.</p>
+          {count === 2 && <p className="hint">Two players sit on opposite corners.</p>}
           {COLORS.map((c) => (
             <div key={c} className="player-row">
               <span className="swatch" style={{ background: COLOR_HEX[c] }} />

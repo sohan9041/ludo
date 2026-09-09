@@ -1,5 +1,6 @@
 import { BASE_ORIGIN, CENTER, GRID, HOME_COLUMN, SAFE_TRACK_INDICES, START_OFFSET, TRACK, cellFor } from '../game/board'
 import { COLORS, type Color, type GameState } from '../game/types'
+import type { PosOverride } from '../hooks/useStepAnimation'
 import { COLOR_HEX } from './colors'
 import { Token } from './Token'
 
@@ -12,6 +13,8 @@ interface Props {
   onTokenClick: (token: number) => void
   /** colour whose turn is shown as "you" (online); null shows all */
   viewer?: Color | null
+  /** temporary display positions while a move is animating */
+  override?: PosOverride
 }
 
 function Star({ x, y }: { x: number; y: number }) {
@@ -37,8 +40,9 @@ function Arrow({ x, y, dir }: { x: number; y: number; dir: 'r' | 'l' | 'u' | 'd'
   )
 }
 
-export function Board({ state, movable, onTokenClick, viewer }: Props) {
+export function Board({ state, movable, onTokenClick, viewer, override = {} }: Props) {
   const c = (n: number) => n * CELL + CELL / 2
+  const posOf = (color: Color, t: number) => override[color]?.[t] ?? state.tokens[color][t]
   return (
     <svg className="board" viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label="Ludo board">
       <rect width={SIZE} height={SIZE} fill="#fafafa" />
@@ -129,12 +133,14 @@ export function Board({ state, movable, onTokenClick, viewer }: Props) {
 
       {/* tokens */}
       {COLORS.filter((col) => state.players[col].active).map((color) =>
-        state.tokens[color].map((pos, t) => {
+        state.tokens[color].map((_, t) => {
+          const pos = posOf(color, t)
           const cell = cellFor(color, t, pos)
           // spread stacked tokens slightly
-          const stack = state.tokens[color].filter((p, i) => p === pos && i < t && pos >= 0).length
+          const stack = state.tokens[color].filter((_p, i) => posOf(color, i) === pos && i < t && pos >= 0).length
           const others = COLORS.filter((oc) => oc !== color && state.players[oc].active).flatMap((oc) =>
-            state.tokens[oc].filter((p) => {
+            state.tokens[oc].filter((_p, i) => {
+              const p = posOf(oc, i)
               const oc2 = cellFor(oc, 0, p)
               return p >= 0 && oc2.row === cell.row && oc2.col === cell.col
             }),

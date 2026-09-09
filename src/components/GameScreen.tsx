@@ -3,6 +3,7 @@ import { chooseMove } from '../game/bot'
 import { movableTokens } from '../game/engine'
 import { COLORS, type Color, type GameAction, type GameState } from '../game/types'
 import { useSound } from '../hooks/useSound'
+import { useStepAnimation } from '../hooks/useStepAnimation'
 import { Board } from './Board'
 import { COLOR_HEX } from './colors'
 import { Dice } from './Dice'
@@ -23,13 +24,14 @@ export function GameScreen({ state, dispatch, viewer, bots = [], onExit, onResta
   const { play, muted, toggleMuted } = useSound()
   const [rolling, setRolling] = useState(false)
   const prev = useRef<GameState>(state)
+  const { override, animating, step } = useStepAnimation(state)
 
   const isBot = bots.includes(state.current)
-  const myTurn = !isBot && (viewer === undefined || viewer === state.current)
+  const myTurn = !isBot && !animating && (viewer === undefined || viewer === state.current)
   const movable = myTurn ? movableTokens(state) : []
 
   useEffect(() => {
-    if (!isBot || state.phase === 'over') return
+    if (!isBot || animating || state.phase === 'over') return
     let cancelled = false
     const id = setTimeout(() => {
       if (cancelled) return
@@ -50,9 +52,14 @@ export function GameScreen({ state, dispatch, viewer, bots = [], onExit, onResta
       cancelled = true
       clearTimeout(id)
     }
-  }, [isBot, state, dispatch, play])
+  }, [isBot, animating, state, dispatch, play])
 
   useEffect(() => {
+    if (step > 0) play('move')
+  }, [step, play])
+
+  useEffect(() => {
+    if (animating) return
     const p = prev.current
     prev.current = state
     if (p === state) return
@@ -65,7 +72,7 @@ export function GameScreen({ state, dispatch, viewer, bots = [], onExit, onResta
     } else if (state.current !== p.current) {
       play('turn')
     }
-  }, [state, play])
+  }, [state, animating, play])
 
   const roll = () => {
     if (!myTurn || state.phase !== 'roll' || rolling) return
@@ -97,7 +104,7 @@ export function GameScreen({ state, dispatch, viewer, bots = [], onExit, onResta
       </header>
 
       <div className="layout">
-        <Board state={state} movable={movable} onTokenClick={(t) => dispatch({ type: 'MOVE', token: t })} viewer={viewer} />
+        <Board state={state} movable={movable} onTokenClick={(t) => dispatch({ type: 'MOVE', token: t })} viewer={viewer} override={override} />
 
         <aside className="panel">
           <div className="status" style={{ borderColor: COLOR_HEX[state.current] }}>
